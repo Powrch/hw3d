@@ -29,7 +29,7 @@ Window::WindowClass::~WindowClass()
 	UnregisterClass(ClassName(), hInstance);
 }
 
-Window::Window(int InWidth, int InHight, const wchar_t* InWindowName)
+Window::Window(int InWidth, int InHight, const char* InWindowName)
 {
 	width = InWidth;
 	hight = InHight;
@@ -40,6 +40,8 @@ Window::Window(int InWidth, int InHight, const wchar_t* InWindowName)
 	wr.top = 100;
 	wr.bottom = wr.top + InHight;
 	AdjustWindowRect(&wr, WS_CAPTION | WS_MINIMIZEBOX | WS_SYSMENU, false);
+
+	//throw CHWND_EXCEPT(ERROR_ARENA_TRASHED);
 
 	hWnd = CreateWindowEx(
 		0,
@@ -96,21 +98,72 @@ LRESULT Window::HandleMessage(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		break;
 	case WM_CHAR:
 	{
-		static std::wstring title;
-		if ((wchar_t)wParam == 'a')
-			title = L"";
-		title.push_back((wchar_t)wParam);
-		SetWindowText(hWnd, (LPCWSTR)title.c_str());
+		static std::string title;
+		if ((char)wParam == 'a')
+			title = "";
+		title.push_back((char)wParam);
+		SetWindowText(hWnd, title.c_str());
 		break;
 	}
 	case WM_LBUTTONDOWN:
 	{
 		POINTS CursorPos = MAKEPOINTS(lParam);
-		std::wostringstream oss;
+		std::ostringstream oss;
 		oss << TEXT("(") << CursorPos.x << TEXT(",") << CursorPos.y << TEXT(")");
-		SetWindowText(hWnd, (LPCWSTR)oss.str().c_str());
+		SetWindowText(hWnd, oss.str().c_str());
 		break;
 	}
 	}
 	return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+Window::Exception::Exception(int line, const char* file, HRESULT hr) noexcept
+	:
+	PowrchException(line, file),
+	hr(hr)
+{
+}
+
+const char* Window::Exception::what() const noexcept
+{
+	std::ostringstream oss;
+	oss << GetType() << std::endl
+		<< "[Error Code]" << GetErrorCode() << std::endl
+		<< "[Description]" << GetErrorString() << std::endl
+		<< GetOriginString();
+	whatBuffer = oss.str();
+	return whatBuffer.c_str();
+}
+
+const char* Window::Exception::GetType() const noexcept
+{
+	return "Powrch Window Exception";
+}
+
+std::string Window::Exception::TranslateErrorCode(HRESULT hr) noexcept
+{
+	char* pMsgBuf = nullptr;
+	DWORD nMsgLen = FormatMessage(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER |
+		FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		nullptr, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+		reinterpret_cast<LPSTR>(&pMsgBuf), 0, nullptr
+	);
+	if (nMsgLen == 0)
+	{
+		return TEXT("Unidentified error code");
+	}
+	std::string errorString = pMsgBuf;
+	LocalFree(pMsgBuf);
+	return errorString;
+}
+
+HRESULT Window::Exception::GetErrorCode() const noexcept
+{
+	return hr;
+}
+
+std::string Window::Exception::GetErrorString() const noexcept
+{
+	return TranslateErrorCode(hr);
 }
